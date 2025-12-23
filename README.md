@@ -105,6 +105,13 @@ Lightweight, efficient, and perfect for resource-constrained embedded devices!
 - **Real-time Updates**: Live data refresh
 - **Chinese Interface**: Native Chinese language support
 
+### Security Features
+- **Backend Authentication**: Password-protected admin interface
+  - Default password: `admin` (recommended to change after first login)
+  - Token-based authentication with auto-expiration
+  - Remember password option
+  - Password change support
+
 ## Architecture
 
 ```

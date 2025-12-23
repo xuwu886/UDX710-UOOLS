@@ -110,6 +110,8 @@ import {
   
   // SystemSettings.vue
   faCalendarAlt,
+  faSignOutAlt,
+  faSignInAlt,
   
   // 主题切换图标
   faSun,
@@ -266,6 +268,8 @@ library.add(
   faCode,
   faHistory,
   faCalendarAlt,
+  faSignOutAlt,
+  faSignInAlt,
   faSun,
   faMoon,
   faLaptop,

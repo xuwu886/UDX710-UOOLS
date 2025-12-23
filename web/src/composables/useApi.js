@@ -5,12 +5,77 @@
 
 const BASE_URL = ''
 
+// 获取存储的Token
+function getAuthToken() {
+  return localStorage.getItem('auth_token') || ''
+}
+
+// 清除Token（登出时使用）
+export function clearAuthToken() {
+  localStorage.removeItem('auth_token')
+}
+
+// 设置Token
+export function setAuthToken(token) {
+  localStorage.setItem('auth_token', token)
+}
+
+// 检查是否已登录
+export function isLoggedIn() {
+  return !!getAuthToken()
+}
+
+// 导出带认证的fetch函数（供组件直接使用）
+export async function authFetch(url, options = {}) {
+  const token = getAuthToken()
+  const headers = {
+    ...options.headers
+  }
+  
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`
+  }
+  
+  const response = await fetch(url, {
+    ...options,
+    headers
+  })
+  
+  // 处理401未授权响应
+  if (response.status === 401) {
+    clearAuthToken()
+    window.dispatchEvent(new CustomEvent('auth-required'))
+  }
+  
+  return response
+}
+
 // 通用请求函数
 async function request(url, options = {}) {
+  const token = getAuthToken()
+  const headers = {
+    'Content-Type': 'application/json',
+    ...options.headers
+  }
+  
+  // 添加Authorization头
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`
+  }
+  
   const response = await fetch(`${BASE_URL}${url}`, {
-    headers: { 'Content-Type': 'application/json', ...options.headers },
+    headers,
     ...options
   })
+  
+  // 处理401未授权响应
+  if (response.status === 401) {
+    clearAuthToken()
+    // 触发自定义事件通知App.vue
+    window.dispatchEvent(new CustomEvent('auth-required'))
+    throw new Error('未授权，请重新登录')
+  }
+  
   if (!response.ok) {
     throw new Error(`HTTP错误: ${response.status}`)
   }
@@ -386,4 +451,47 @@ export async function deleteScript(name) {
   return request(`/api/scripts/${encodeURIComponent(name)}`, {
     method: 'DELETE'
   })
+}
+
+
+// ==================== 认证API ====================
+
+// 登录
+export async function authLogin(password) {
+  const response = await fetch('/api/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ password })
+  })
+  const data = await response.json()
+  if (response.ok && data.token) {
+    localStorage.setItem('auth_token', data.token)
+  }
+  return { ok: response.ok, data }
+}
+
+// 登出
+export async function authLogout() {
+  try {
+    await request('/api/auth/logout', { method: 'POST' })
+  } finally {
+    clearAuthToken()
+  }
+}
+
+// 修改密码
+export async function authChangePassword(oldPassword, newPassword) {
+  return request('/api/auth/password', {
+    method: 'POST',
+    body: JSON.stringify({ old_password: oldPassword, new_password: newPassword })
+  })
+}
+
+// 获取登录状态
+export async function authGetStatus() {
+  const token = getAuthToken()
+  const headers = token ? { 'Authorization': `Bearer ${token}` } : {}
+  
+  const response = await fetch('/api/auth/status', { headers })
+  return response.json()
 }

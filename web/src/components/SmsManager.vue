@@ -2,6 +2,7 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useConfirm } from '../composables/useConfirm'
+import { authFetch } from '../composables/useApi'
 
 const { t } = useI18n()
 const { confirm } = useConfirm()
@@ -52,7 +53,7 @@ const unreadCount = computed(() => messages.value.filter(m => !m.read).length)
 async function fetchSmsList() {
   loading.value = true
   try {
-    const res = await fetch('/api/sms')
+    const res = await authFetch('/api/sms')
     if (res.ok) messages.value = await res.json()
   } catch (e) { console.error('获取短信列表失败:', e) }
   finally { loading.value = false }
@@ -60,14 +61,14 @@ async function fetchSmsList() {
 
 async function fetchSentList() {
   try {
-    const res = await fetch('/api/sms/sent')
+    const res = await authFetch('/api/sms/sent')
     if (res.ok) sentMessages.value = await res.json()
   } catch (e) { console.error('获取发送记录失败:', e) }
 }
 
 async function fetchWebhookConfig() {
   try {
-    const res = await fetch('/api/sms/webhook')
+    const res = await authFetch('/api/sms/webhook')
     if (res.ok) {
       const data = await res.json()
       webhookConfig.value = data
@@ -81,13 +82,13 @@ async function fetchWebhookConfig() {
 
 async function fetchSmsConfig() {
   try {
-    const res = await fetch('/api/sms/config')
+    const res = await authFetch('/api/sms/config')
     if (res.ok) smsConfig.value = await res.json()
   } catch (e) { console.error('获取短信配置失败:', e) }
 }
 
 async function sendSmsApi(recipient, content) {
-  const res = await fetch('/api/sms/send', {
+  const res = await authFetch('/api/sms/send', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ recipient, content })
   })
@@ -95,12 +96,12 @@ async function sendSmsApi(recipient, content) {
 }
 
 async function deleteSmsApi(id) {
-  const res = await fetch(`/api/sms/${id}`, { method: 'DELETE' })
+  const res = await authFetch(`/api/sms/${id}`, { method: 'DELETE' })
   return res.json()
 }
 
 async function saveWebhookApi() {
-  const res = await fetch('/api/sms/webhook', {
+  const res = await authFetch('/api/sms/webhook', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(webhookConfig.value)
   })
@@ -108,12 +109,12 @@ async function saveWebhookApi() {
 }
 
 async function testWebhookApi() {
-  const res = await fetch('/api/sms/webhook/test', { method: 'POST' })
+  const res = await authFetch('/api/sms/webhook/test', { method: 'POST' })
   return res.json()
 }
 
 async function saveSmsConfigApi() {
-  const res = await fetch('/api/sms/config', {
+  const res = await authFetch('/api/sms/config', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(smsConfig.value)
   })
@@ -122,7 +123,7 @@ async function saveSmsConfigApi() {
 
 async function fetchSmsFixStatus() {
   try {
-    const res = await fetch('/api/sms/fix')
+    const res = await authFetch('/api/sms/fix')
     if (res.ok) {
       const data = await res.json()
       smsFixEnabled.value = data.enabled
@@ -133,7 +134,7 @@ async function fetchSmsFixStatus() {
 async function toggleSmsFix() {
   smsFixLoading.value = true
   try {
-    const res = await fetch('/api/sms/fix', {
+    const res = await authFetch('/api/sms/fix', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ enabled: !smsFixEnabled.value })
     })
@@ -180,7 +181,7 @@ function closeDialog() { showDialog.value = false; currentMessage.value = null }
 async function deleteMessage(id) { await deleteSmsApi(id); fetchSmsList(); closeDialog() }
 async function deleteSentMessage(id) {
   try {
-    const res = await fetch(`/api/sms/sent/${id}`, { method: 'DELETE' })
+    const res = await authFetch(`/api/sms/sent/${id}`, { method: 'DELETE' })
     const result = await res.json()
     if (result.status === 'success') { fetchSentList(); return true }
     else { showStatus(false, result.error || '删除失败'); return false }

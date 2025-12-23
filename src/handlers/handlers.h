@@ -74,6 +74,12 @@ void handle_plugin_storage_get(struct mg_connection *c, struct mg_http_message *
 void handle_plugin_storage_set(struct mg_connection *c, struct mg_http_message *hm);
 void handle_plugin_storage_delete(struct mg_connection *c, struct mg_http_message *hm);
 
+/* 认证 API */
+void handle_auth_login(struct mg_connection *c, struct mg_http_message *hm);
+void handle_auth_logout(struct mg_connection *c, struct mg_http_message *hm);
+void handle_auth_password(struct mg_connection *c, struct mg_http_message *hm);
+void handle_auth_status(struct mg_connection *c, struct mg_http_message *hm);
+
 #ifdef __cplusplus
 }
 #endif

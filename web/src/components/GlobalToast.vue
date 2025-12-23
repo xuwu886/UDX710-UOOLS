@@ -6,7 +6,7 @@ const { toast } = useToast()
 <template>
   <Teleport to="body">
     <Transition name="slide">
-      <div v-if="toast.show" class="fixed bottom-6 right-6 px-6 py-4 rounded-2xl shadow-2xl border z-50"
+      <div v-if="toast.show" class="fixed bottom-6 right-6 px-6 py-4 rounded-2xl shadow-2xl border z-[200]"
         :class="toast.success ? 'bg-emerald-500/90 border-emerald-400/50 text-white' : 'bg-red-500/90 border-red-400/50 text-white'">
         <div class="flex items-center space-x-3">
           <i :class="toast.success ? 'fas fa-check-circle' : 'fas fa-times-circle'" class="text-xl"></i>

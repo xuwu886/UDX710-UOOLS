@@ -3,7 +3,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useToast } from '../composables/useToast'
 import { useConfirm } from '../composables/useConfirm'
-import { useApi } from '../composables/useApi'
+import { useApi, authFetch } from '../composables/useApi'
 
 const { t } = useI18n()
 const api = useApi()
@@ -142,7 +142,7 @@ async function startUpdate() {
       const formData = new FormData()
       formData.append('file', selectedFile.value)
       
-      const uploadRes = await fetch('/api/update/upload', {
+      const uploadRes = await authFetch('/api/update/upload', {
         method: 'POST',
         body: formData
       })

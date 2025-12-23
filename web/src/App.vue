@@ -16,9 +16,123 @@ import ApnConfig from './components/ApnConfig.vue'
 import PluginStore from './components/PluginStore.vue'
 import GlobalToast from './components/GlobalToast.vue'
 import GlobalConfirm from './components/GlobalConfirm.vue'
+import { isLoggedIn, authGetStatus, clearAuthToken, authLogin } from './composables/useApi'
+import { useToast } from './composables/useToast'
 
 // i18n
 const { t, locale } = useI18n()
+const { success, error: showError } = useToast()
+
+// 登录状态
+const isAuthenticated = ref(false)
+const authChecking = ref(true)
+const showLoginModal = ref(false)
+
+// 登录表单
+const loginPassword = ref('')
+const rememberPassword = ref(false)
+const loggingIn = ref(false)
+const showPassword = ref(false)
+
+// 检查登录状态
+async function checkAuthStatus() {
+  authChecking.value = true
+  try {
+    // 先检查本地是否有token
+    if (!isLoggedIn()) {
+      isAuthenticated.value = false
+      showLoginModal.value = true
+      // 检查是否有保存的密码
+      const savedPassword = localStorage.getItem('saved_password')
+      if (savedPassword) {
+        loginPassword.value = savedPassword
+        rememberPassword.value = true
+      }
+      return
+    }
+    // 验证token是否有效
+    const status = await authGetStatus()
+    isAuthenticated.value = status.logged_in === true
+    if (!isAuthenticated.value) {
+      clearAuthToken()
+      showLoginModal.value = true
+      // 检查是否有保存的密码
+      const savedPassword = localStorage.getItem('saved_password')
+      if (savedPassword) {
+        loginPassword.value = savedPassword
+        rememberPassword.value = true
+      }
+    }
+  } catch (err) {
+    console.error('Auth check error:', err)
+    isAuthenticated.value = false
+    clearAuthToken()
+    showLoginModal.value = true
+  } finally {
+    authChecking.value = false
+  }
+}
+
+// 处理登录
+async function handleLogin() {
+  if (!loginPassword.value) {
+    showError(t('auth.enterPassword'))
+    return
+  }
+  
+  loggingIn.value = true
+  try {
+    const result = await authLogin(loginPassword.value)
+    if (result.ok && result.data.token) {
+      isAuthenticated.value = true
+      showLoginModal.value = false
+      success(t('auth.loginSuccess'))
+      
+      // 处理记住密码
+      if (rememberPassword.value) {
+        localStorage.setItem('saved_password', loginPassword.value)
+      } else {
+        localStorage.removeItem('saved_password')
+      }
+      
+      // 登录成功后开始获取系统信息
+      fetchSystemInfo()
+      startRefreshInterval()
+    } else {
+      showError(result.data?.error || t('auth.wrongPassword'))
+    }
+  } catch (err) {
+    showError(t('auth.loginFailed') + ': ' + err.message)
+  } finally {
+    loggingIn.value = false
+  }
+}
+
+// 登录成功处理（兼容旧接口）
+function handleLoginSuccess() {
+  isAuthenticated.value = true
+  showLoginModal.value = false
+  // 登录成功后开始获取系统信息
+  fetchSystemInfo()
+  startRefreshInterval()
+}
+
+// 登出处理
+function handleLogout() {
+  clearAuthToken()
+  localStorage.removeItem('saved_password')
+  isAuthenticated.value = false
+  showLoginModal.value = true
+  loginPassword.value = ''
+  rememberPassword.value = false
+  stopRefreshInterval()
+}
+
+// 监听401事件
+function handleAuthRequired() {
+  isAuthenticated.value = false
+  showLoginModal.value = true
+}
 
 // 切换语言
 function toggleLocale() {
@@ -130,10 +244,21 @@ const menuItems = [
 
 // 获取系统信息
 async function fetchSystemInfo() {
+  if (!isAuthenticated.value) return
   loading.value = true
   try {
-    const response = await fetch('/api/info')
-    if (!response.ok) throw new Error('获取失败')
+    const token = localStorage.getItem('auth_token')
+    const headers = token ? { 'Authorization': `Bearer ${token}` } : {}
+    const response = await fetch('/api/info', { headers })
+    if (!response.ok) {
+      if (response.status === 401) {
+        // Token失效，触发重新登录
+        isAuthenticated.value = false
+        localStorage.removeItem('auth_token')
+        return
+      }
+      throw new Error('获取失败')
+    }
     systemInfo.value = await response.json()
     lastUpdate.value = new Date().toLocaleTimeString()
   } catch (error) {
@@ -143,24 +268,165 @@ async function fetchSystemInfo() {
   }
 }
 
+// 提供登出函数给子组件
+provide('handleLogout', handleLogout)
+
 let refreshInterval = null
-onMounted(() => {
-  fetchSystemInfo()
+
+function startRefreshInterval() {
+  if (refreshInterval) return
   refreshInterval = setInterval(fetchSystemInfo, 30000)
+}
+
+function stopRefreshInterval() {
+  if (refreshInterval) {
+    clearInterval(refreshInterval)
+    refreshInterval = null
+  }
+}
+
+onMounted(async () => {
   // 移动端检测
   checkMobile()
   window.addEventListener('resize', checkMobile)
   // 初始化主题
   initTheme()
+  // 监听401事件
+  window.addEventListener('auth-required', handleAuthRequired)
+  
+  // 检查登录状态
+  await checkAuthStatus()
+  
+  // 如果已登录，开始获取系统信息
+  if (isAuthenticated.value) {
+    fetchSystemInfo()
+    startRefreshInterval()
+  }
 })
 onUnmounted(() => {
-  if (refreshInterval) clearInterval(refreshInterval)
+  stopRefreshInterval()
   window.removeEventListener('resize', checkMobile)
+  window.removeEventListener('auth-required', handleAuthRequired)
 })
 </script>
 
 <template>
-  <div class="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/40 to-indigo-50/30 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900 flex transition-all duration-500">
+  <!-- 加载状态 -->
+  <div v-if="authChecking" class="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/40 to-indigo-50/30 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900 flex items-center justify-center">
+    <div class="text-center">
+      <div class="w-16 h-16 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-blue-500 to-cyan-400 flex items-center justify-center shadow-lg shadow-blue-500/30 animate-pulse">
+        <font-awesome-icon icon="wifi" class="text-white text-2xl" />
+      </div>
+      <p class="text-slate-500 dark:text-white/50">{{ t('common.loading') }}</p>
+    </div>
+  </div>
+
+  <!-- 主界面（始终显示，未登录时模糊） -->
+  <div v-else class="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/40 to-indigo-50/30 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900 flex transition-all duration-500">
+    
+    <!-- 登录弹窗遮罩 -->
+    <Transition name="modal-backdrop">
+      <div 
+        v-if="showLoginModal"
+        class="fixed inset-0 z-[100] flex items-center justify-center p-4"
+      >
+        <!-- 毛玻璃背景 -->
+        <div class="absolute inset-0 bg-slate-900/60 dark:bg-black/70 backdrop-blur-md"></div>
+        
+        <!-- 登录弹窗 -->
+        <Transition name="modal-content">
+          <div 
+            v-if="showLoginModal"
+            class="relative w-full max-w-md"
+          >
+            <!-- 弹窗卡片 -->
+            <div class="bg-white/95 dark:bg-slate-800/95 backdrop-blur-xl rounded-3xl shadow-2xl shadow-black/20 border border-white/20 dark:border-white/10 overflow-hidden">
+              <!-- 内容区 -->
+              <div class="p-8">
+                <!-- Logo -->
+                <div class="text-center mb-8">
+                  <div class="w-20 h-20 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-blue-500 to-cyan-400 flex items-center justify-center shadow-xl shadow-blue-500/30">
+                    <font-awesome-icon icon="wifi" class="text-white text-3xl" />
+                  </div>
+                  <h1 class="text-2xl font-bold text-slate-900 dark:text-white">{{ t('header.title') }}</h1>
+                  <p class="text-slate-500 dark:text-white/50 mt-1">{{ t('auth.welcomeBack') }}</p>
+                </div>
+                
+                <!-- 登录表单 -->
+                <form @submit.prevent="handleLogin" class="space-y-6">
+                  <!-- 密码输入 -->
+                  <div>
+                    <label class="block text-slate-600 dark:text-white/60 text-sm font-medium mb-2">
+                      <font-awesome-icon icon="lock" class="mr-2" />
+                      {{ t('auth.password') }}
+                    </label>
+                    <div class="relative">
+                      <input 
+                        :type="showPassword ? 'text' : 'password'" 
+                        v-model="loginPassword"
+                        :placeholder="t('auth.enterPassword')"
+                        class="w-full px-4 py-4 pr-12 bg-slate-100 dark:bg-white/10 border-2 border-transparent rounded-xl text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-white/30 focus:border-blue-500 focus:bg-white dark:focus:bg-white/5 transition-all text-lg"
+                        autofocus
+                      >
+                      <button 
+                        type="button"
+                        @click="showPassword = !showPassword"
+                        class="absolute right-4 top-1/2 -translate-y-1/2 w-6 text-center text-slate-400 dark:text-white/30 hover:text-slate-600 dark:hover:text-white/60 transition-colors"
+                      >
+                        <font-awesome-icon :icon="showPassword ? 'eye-slash' : 'eye'" class="w-5" fixed-width />
+                      </button>
+                    </div>
+                  </div>
+                  
+                  <!-- 记住密码 -->
+                  <label class="flex items-center cursor-pointer group">
+                    <div class="relative">
+                      <input 
+                        type="checkbox" 
+                        v-model="rememberPassword"
+                        class="sr-only peer"
+                      >
+                      <div class="w-5 h-5 bg-slate-200 dark:bg-white/10 rounded-md border-2 border-slate-300 dark:border-white/20 peer-checked:bg-blue-500 peer-checked:border-blue-500 transition-all flex items-center justify-center">
+                        <font-awesome-icon 
+                          v-if="rememberPassword" 
+                          icon="check" 
+                          class="text-white text-xs"
+                        />
+                      </div>
+                    </div>
+                    <span class="ml-3 text-slate-600 dark:text-white/60 text-sm group-hover:text-slate-900 dark:group-hover:text-white/80 transition-colors">
+                      {{ t('auth.rememberPassword') || '记住密码' }}
+                    </span>
+                  </label>
+                  
+                  <!-- 登录按钮 -->
+                  <button 
+                    type="submit"
+                    :disabled="loggingIn || !loginPassword"
+                    class="w-full py-4 bg-gradient-to-r from-blue-500 to-cyan-400 text-white font-bold text-lg rounded-xl hover:shadow-lg hover:shadow-blue-500/30 hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 disabled:hover:shadow-none"
+                  >
+                    <font-awesome-icon 
+                      :icon="loggingIn ? 'spinner' : 'sign-in-alt'" 
+                      :class="loggingIn ? 'animate-spin' : ''"
+                      class="mr-2"
+                    />
+                    {{ loggingIn ? t('auth.loggingIn') : t('auth.login') }}
+                  </button>
+                </form>
+              </div>
+              
+              <!-- 底部提示 -->
+              <div class="px-8 py-4 bg-slate-50 dark:bg-white/5 border-t border-slate-200 dark:border-white/10">
+                <p class="text-center text-slate-500 dark:text-white/40 text-sm">
+                  <font-awesome-icon icon="shield-alt" class="mr-1" />
+                  {{ t('auth.loginToContinue') }}
+                </p>
+              </div>
+            </div>
+          </div>
+        </Transition>
+      </div>
+    </Transition>
     <!-- 移动端遮罩层 -->
     <div 
       v-if="isMobile && sidebarOpen"
@@ -201,7 +467,10 @@ onUnmounted(() => {
             :key="item.id"
             @click="handleMenuClick(item.id)"
             class="w-full group relative overflow-hidden rounded-xl transition-all duration-300"
-            :class="activeMenu === item.id ? 'bg-gradient-to-r from-blue-100/80 to-indigo-100/60 dark:from-white/20 dark:to-white/10 shadow-md shadow-blue-200/30 dark:shadow-black/10' : 'hover:bg-slate-100/80 dark:hover:bg-white/10'"
+            :class="[
+              activeMenu === item.id && (!sidebarCollapsed || isMobile) ? 'bg-gradient-to-r from-blue-100/80 to-indigo-100/60 dark:from-white/20 dark:to-white/10 shadow-md shadow-blue-200/30 dark:shadow-black/10' : '',
+              activeMenu !== item.id ? 'hover:bg-slate-100/80 dark:hover:bg-white/10' : ''
+            ]"
           >
             <div class="flex items-center p-2 md:p-3" :class="(sidebarCollapsed && !isMobile) ? 'justify-center' : 'space-x-3'">
               <div 
@@ -358,5 +627,46 @@ onUnmounted(() => {
 .fade-leave-to {
   opacity: 0;
   transform: translateX(-16px) scale(0.98);
+}
+
+/* 登录弹窗动画 */
+.modal-backdrop-enter-active {
+  transition: all 0.3s ease-out;
+}
+.modal-backdrop-leave-active {
+  transition: all 0.2s ease-in;
+}
+.modal-backdrop-enter-from,
+.modal-backdrop-leave-to {
+  opacity: 0;
+}
+
+.modal-content-enter-active {
+  transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.modal-content-leave-active {
+  transition: all 0.2s ease-in;
+}
+.modal-content-enter-from {
+  opacity: 0;
+  transform: scale(0.9) translateY(20px);
+}
+.modal-content-leave-to {
+  opacity: 0;
+  transform: scale(0.95) translateY(-10px);
+}
+
+/* 隐藏浏览器原生密码显示按钮 */
+input[type="password"]::-ms-reveal,
+input[type="password"]::-ms-clear {
+  display: none;
+}
+input[type="password"]::-webkit-credentials-auto-fill-button,
+input[type="password"]::-webkit-clear-button {
+  display: none;
+}
+/* Edge/Chrome 密码眼睛按钮 */
+input::-ms-reveal {
+  display: none;
 }
 </style>

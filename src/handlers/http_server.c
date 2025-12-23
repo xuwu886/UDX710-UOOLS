@@ -20,6 +20,7 @@
 #include "sms.h"
 #include "usb_mode.h"
 #include "http_utils.h"
+#include "auth.h"
 
 /* 嵌入式文件系统声明 (packed_fs.c) */
 extern int serve_packed_file(struct mg_connection *c, struct mg_http_message *hm);
@@ -32,6 +33,44 @@ static volatile int g_running = 0;
 static void signal_handler(int sig) {
     (void)sig;
     g_running = 0;
+}
+
+/**
+ * 检查API是否在白名单中（无需认证）
+ */
+static int is_auth_whitelist(const char *uri) {
+    /* 认证相关API无需认证 */
+    if (strncmp(uri, "/api/auth/login", 15) == 0) return 1;
+    if (strncmp(uri, "/api/auth/status", 16) == 0) return 1;
+    return 0;
+}
+
+/**
+ * 验证请求的Token
+ * @return 0验证通过，-1验证失败
+ */
+static int verify_request_token(struct mg_http_message *hm) {
+    struct mg_str *auth_header = mg_http_get_header(hm, "Authorization");
+    
+    if (!auth_header || auth_header->len <= 7) {
+        return -1;
+    }
+    
+    /* 格式: "Bearer <token>" */
+    if (strncmp(auth_header->buf, "Bearer ", 7) != 0) {
+        return -1;
+    }
+    
+    char token[65] = {0};
+    size_t token_len = auth_header->len - 7;
+    if (token_len >= sizeof(token)) {
+        return -1;
+    }
+    
+    memcpy(token, auth_header->buf + 7, token_len);
+    token[token_len] = '\0';
+    
+    return auth_verify_token(token);
 }
 
 
@@ -47,6 +86,32 @@ static void http_handler(struct mg_connection *c, int ev, void *ev_data) {
         if (hm->uri.len < 5 || memcmp(hm->uri.buf, "/api/", 5) != 0) {
             if (serve_packed_file(c, hm)) {
                 return;  /* 静态文件已处理 */
+            }
+        }
+
+        /* 认证 API - 优先处理，无需Token验证 */
+        if (mg_match(hm->uri, mg_str("/api/auth/login"), NULL)) {
+            handle_auth_login(c, hm);
+            return;
+        }
+        else if (mg_match(hm->uri, mg_str("/api/auth/status"), NULL)) {
+            handle_auth_status(c, hm);
+            return;
+        }
+        else if (mg_match(hm->uri, mg_str("/api/auth/logout"), NULL)) {
+            handle_auth_logout(c, hm);
+            return;
+        }
+        else if (mg_match(hm->uri, mg_str("/api/auth/password"), NULL)) {
+            handle_auth_password(c, hm);
+            return;
+        }
+
+        /* 认证中间件 - 检查Token */
+        if (!is_auth_whitelist(uri)) {
+            if (verify_request_token(hm) != 0) {
+                HTTP_JSON(c, 401, "{\"status\":\"error\",\"message\":\"未授权，请先登录\"}");
+                return;
             }
         }
 
@@ -281,6 +346,11 @@ int http_server_start(const char *port) {
 
     /* 初始化充电控制 */
     init_charge();
+
+    /* 初始化认证模块 */
+    if (auth_init() != 0) {
+        printf("警告: 认证模块初始化失败\n");
+    }
 
     /* 初始化短信模块 */
     if (sms_init("6677.db") != 0) {

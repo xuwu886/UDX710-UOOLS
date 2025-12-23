@@ -1,7 +1,7 @@
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted, inject } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { deviceControl, getRebootConfig, setReboot, clearReboot, getSystemTime, syncSystemTime, useApi } from '../composables/useApi'
+import { deviceControl, getRebootConfig, setReboot, clearReboot, getSystemTime, syncSystemTime, useApi, authChangePassword } from '../composables/useApi'
 import { useToast } from '../composables/useToast'
 import { useConfirm } from '../composables/useConfirm'
 
@@ -9,6 +9,9 @@ const { t } = useI18n()
 const { success, error } = useToast()
 const { confirm } = useConfirm()
 const api = useApi()
+
+// 获取登出函数
+const handleLogout = inject('handleLogout', () => {})
 
 const rebooting = ref(false)
 const shuttingDown = ref(false)
@@ -18,6 +21,13 @@ const selectedDays = ref([])
 const savingReboot = ref(false)
 const currentTime = ref('')
 const syncingTime = ref(false)
+
+// 密码修改相关
+const oldPassword = ref('')
+const newPassword = ref('')
+const confirmPassword = ref('')
+const changingPassword = ref(false)
+const showPasswordForm = ref(false)
 
 const weekDays = [
   { value: '1', labelKey: 'settings.mon', short: '一' },
@@ -69,6 +79,56 @@ async function handleSyncTime() {
   } finally {
     syncingTime.value = false
   }
+}
+
+// 修改密码
+async function handleChangePassword() {
+  if (!oldPassword.value || !newPassword.value || !confirmPassword.value) {
+    error(t('auth.fillAllFields'))
+    return
+  }
+  if (newPassword.value !== confirmPassword.value) {
+    error(t('auth.passwordMismatch'))
+    return
+  }
+  if (newPassword.value.length < 4) {
+    error(t('auth.passwordTooShort'))
+    return
+  }
+  
+  changingPassword.value = true
+  try {
+    const result = await authChangePassword(oldPassword.value, newPassword.value)
+    if (result.success) {
+      success(t('auth.passwordChanged'))
+      oldPassword.value = ''
+      newPassword.value = ''
+      confirmPassword.value = ''
+      showPasswordForm.value = false
+    } else {
+      error(result.error || t('auth.changeFailed'))
+    }
+  } catch (err) {
+    error(t('auth.changeFailed') + ': ' + err.message)
+  } finally {
+    changingPassword.value = false
+  }
+}
+
+// 切换密码表单显示
+function togglePasswordForm() {
+  showPasswordForm.value = !showPasswordForm.value
+  if (!showPasswordForm.value) {
+    oldPassword.value = ''
+    newPassword.value = ''
+    confirmPassword.value = ''
+  }
+}
+
+// 登出
+async function doLogout() {
+  if (!await confirm({ title: t('auth.logout'), message: t('auth.confirmLogout') })) return
+  handleLogout()
 }
 
 async function handleReboot() {
@@ -302,6 +362,101 @@ onUnmounted(() => {
         <i :class="savingReboot ? 'fas fa-spinner animate-spin' : 'fas fa-save'" class="mr-2"></i>
         {{ savingReboot ? t('settings.saving') : t('settings.saveSettings') }}
       </button>
+    </div>
+
+    <!-- 账户安全 -->
+    <div class="rounded-2xl bg-white/95 dark:bg-white/5 backdrop-blur border border-slate-200/60 dark:border-white/10 p-6 shadow-lg shadow-slate-200/40 dark:shadow-black/20 hover:shadow-xl hover:shadow-slate-300/50 dark:hover:shadow-black/30 transition-all duration-300">
+      <h3 class="text-slate-900 dark:text-white font-semibold mb-6 flex items-center">
+        <i class="fas fa-shield-alt text-green-500 dark:text-green-400 mr-2"></i>
+        {{ t('auth.accountSecurity') }}
+      </h3>
+
+      <div class="space-y-4">
+        <!-- 修改密码按钮 -->
+        <button 
+          @click="togglePasswordForm"
+          class="w-full flex items-center justify-between p-4 bg-slate-50 dark:bg-white/5 rounded-xl hover:bg-slate-100 dark:hover:bg-white/10 transition-all"
+        >
+          <div class="flex items-center space-x-3">
+            <div class="w-10 h-10 rounded-lg bg-amber-500/20 flex items-center justify-center">
+              <i class="fas fa-key text-amber-500 dark:text-amber-400"></i>
+            </div>
+            <div class="text-left">
+              <p class="text-slate-900 dark:text-white font-medium">{{ t('auth.changePassword') }}</p>
+              <p class="text-slate-500 dark:text-white/50 text-sm">{{ t('auth.changePasswordDesc') || '修改登录密码' }}</p>
+            </div>
+          </div>
+          <i :class="showPasswordForm ? 'fas fa-chevron-up' : 'fas fa-chevron-down'" class="text-slate-400 dark:text-white/40 transition-transform duration-300"></i>
+        </button>
+
+        <!-- 密码修改表单 - 带动画 -->
+        <Transition
+          enter-active-class="transition-all duration-300 ease-out"
+          enter-from-class="opacity-0 -translate-y-2"
+          enter-to-class="opacity-100 translate-y-0"
+          leave-active-class="transition-all duration-200 ease-in"
+          leave-from-class="opacity-100 translate-y-0"
+          leave-to-class="opacity-0 -translate-y-2"
+        >
+          <div v-if="showPasswordForm" class="space-y-4 pl-4 border-l-2 border-amber-500/30 ml-5 overflow-hidden">
+            <div>
+              <label class="block text-slate-600 dark:text-white/60 text-sm mb-2">{{ t('auth.oldPassword') }}</label>
+              <input 
+                type="password" 
+                v-model="oldPassword"
+                :placeholder="t('auth.enterOldPassword')"
+                class="w-full px-4 py-3 bg-slate-50 dark:bg-white/10 border border-slate-200 dark:border-white/20 rounded-xl text-slate-900 dark:text-white focus:border-green-400 focus:ring-2 focus:ring-green-400/20 transition-all"
+              >
+            </div>
+            
+            <div>
+              <label class="block text-slate-600 dark:text-white/60 text-sm mb-2">{{ t('auth.newPassword') }}</label>
+              <input 
+                type="password" 
+                v-model="newPassword"
+                :placeholder="t('auth.enterNewPassword')"
+                class="w-full px-4 py-3 bg-slate-50 dark:bg-white/10 border border-slate-200 dark:border-white/20 rounded-xl text-slate-900 dark:text-white focus:border-green-400 focus:ring-2 focus:ring-green-400/20 transition-all"
+              >
+            </div>
+            
+            <div>
+              <label class="block text-slate-600 dark:text-white/60 text-sm mb-2">{{ t('auth.confirmNewPassword') }}</label>
+              <input 
+                type="password" 
+                v-model="confirmPassword"
+                :placeholder="t('auth.enterConfirmPassword')"
+                class="w-full px-4 py-3 bg-slate-50 dark:bg-white/10 border border-slate-200 dark:border-white/20 rounded-xl text-slate-900 dark:text-white focus:border-green-400 focus:ring-2 focus:ring-green-400/20 transition-all"
+              >
+            </div>
+            
+            <button 
+              @click="handleChangePassword" 
+              :disabled="changingPassword"
+              class="w-full py-3 bg-gradient-to-r from-green-500 to-emerald-400 text-white font-medium rounded-xl hover:shadow-lg hover:shadow-green-500/30 transition-all disabled:opacity-50"
+            >
+              <i :class="changingPassword ? 'fas fa-spinner animate-spin' : 'fas fa-check'" class="mr-2"></i>
+              {{ changingPassword ? t('common.loading') : t('common.confirm') }}
+            </button>
+          </div>
+        </Transition>
+
+        <!-- 登出按钮 -->
+        <button 
+          @click="doLogout"
+          class="w-full flex items-center justify-between p-4 bg-slate-50 dark:bg-white/5 rounded-xl hover:bg-red-50 dark:hover:bg-red-500/10 transition-all group"
+        >
+          <div class="flex items-center space-x-3">
+            <div class="w-10 h-10 rounded-lg bg-slate-200 dark:bg-white/10 group-hover:bg-red-500/20 flex items-center justify-center transition-colors">
+              <i class="fas fa-sign-out-alt text-slate-500 dark:text-white/50 group-hover:text-red-500 dark:group-hover:text-red-400 transition-colors"></i>
+            </div>
+            <div class="text-left">
+              <p class="text-slate-900 dark:text-white font-medium group-hover:text-red-600 dark:group-hover:text-red-400 transition-colors">{{ t('auth.logout') }}</p>
+              <p class="text-slate-500 dark:text-white/50 text-sm">{{ t('auth.logoutDesc') }}</p>
+            </div>
+          </div>
+          <i class="fas fa-chevron-right text-slate-400 dark:text-white/40 group-hover:text-red-500 transition-colors"></i>
+        </button>
+      </div>
     </div>
   </div>
 </template>

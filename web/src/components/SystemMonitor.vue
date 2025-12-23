@@ -157,7 +157,7 @@ async function handleClearCache() {
               <i class="fas fa-satellite-dish text-white text-xl"></i>
             </div>
             <div>
-              <h3 class="text-slate-800 dark:text-white font-bold text-lg">{{ t('monitor.title') }}</h3>
+              <h3 class="text-slate-800 dark:text-white font-bold text-sm sm:text-lg">{{ t('monitor.title') }}</h3>
               <p class="text-slate-600 dark:text-white/50 text-sm">{{ t('monitor.subtitle') }}</p>
             </div>
           </div>
@@ -233,8 +233,8 @@ async function handleClearCache() {
             </div>
           </div>
 
-          <!-- RSRP - 手机端隐藏 -->
-          <div class="hidden sm:block group relative overflow-hidden p-2 sm:p-3 md:p-4 bg-white/80 dark:bg-white/5 backdrop-blur rounded-xl sm:rounded-2xl border border-slate-200 dark:border-white/10 hover:border-rose-500/50 transition-all hover:scale-105">
+          <!-- RSRP - 竖屏隐藏，横屏显示 -->
+          <div class="hidden landscape:block group relative overflow-hidden p-2 sm:p-3 md:p-4 bg-white/80 dark:bg-white/5 backdrop-blur rounded-xl sm:rounded-2xl border border-slate-200 dark:border-white/10 hover:border-rose-500/50 transition-all hover:scale-105">
             <div class="absolute inset-0 bg-gradient-to-br from-rose-500/0 to-pink-500/0 group-hover:from-rose-500/10 group-hover:to-pink-500/10 transition-all"></div>
             <div class="relative text-center">
               <div class="w-8 h-8 sm:w-10 sm:h-10 md:w-12 md:h-12 mx-auto mb-1.5 sm:mb-2 md:mb-3 rounded-lg sm:rounded-xl bg-gradient-to-br from-rose-500 to-pink-400 flex items-center justify-center shadow-lg shadow-rose-500/30">

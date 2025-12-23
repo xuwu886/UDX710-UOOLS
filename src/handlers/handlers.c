@@ -1369,18 +1369,22 @@ void handle_plugin_delete(struct mg_connection *c, struct mg_http_message *hm) {
     name_start += 13;  /* 跳过 "/api/plugins/" */
 
     /* 提取名称直到URI结束或遇到? */
-    char name[256] = {0};
+    char encoded_name[256] = {0};
     int i = 0;
     while (name_start[i] && name_start[i] != '?' && name_start[i] != ' ' && i < 255) {
-        name[i] = name_start[i];
+        encoded_name[i] = name_start[i];
         i++;
     }
-    name[i] = '\0';
+    encoded_name[i] = '\0';
 
-    if (strlen(name) == 0) {
+    if (strlen(encoded_name) == 0) {
         HTTP_ERROR(c, 400, "插件名称不能为空");
         return;
     }
+
+    /* URL解码支持中文名称 */
+    char name[256] = {0};
+    mg_url_decode(encoded_name, strlen(encoded_name), name, sizeof(name), 0);
 
     if (delete_plugin(name) == 0) {
         HTTP_OK(c, "{\"Code\":0,\"Error\":\"\",\"Data\":\"插件删除成功\"}");
@@ -1586,18 +1590,22 @@ void handle_script_delete(struct mg_connection *c, struct mg_http_message *hm) {
     }
     name_start += 13;
 
-    char name[256] = {0};
+    char encoded_name[256] = {0};
     int i = 0;
     while (name_start[i] && name_start[i] != '?' && name_start[i] != ' ' && i < 255) {
-        name[i] = name_start[i];
+        encoded_name[i] = name_start[i];
         i++;
     }
-    name[i] = '\0';
+    encoded_name[i] = '\0';
 
-    if (strlen(name) == 0) {
+    if (strlen(encoded_name) == 0) {
         HTTP_ERROR(c, 400, "脚本名称不能为空");
         return;
     }
+
+    /* URL解码支持中文名称 */
+    char name[256] = {0};
+    mg_url_decode(encoded_name, strlen(encoded_name), name, sizeof(name), 0);
 
     char filepath[512];
     snprintf(filepath, sizeof(filepath), "%s/%s", SCRIPTS_DIR, name);
@@ -1619,13 +1627,19 @@ static int extract_plugin_name_from_url(const char *uri, char *name, size_t size
     if (!start) return -1;
     
     start += strlen(prefix);
+    char encoded[256] = {0};
     size_t i = 0;
-    while (start[i] && start[i] != '?' && start[i] != ' ' && i < size - 1) {
-        name[i] = start[i];
+    while (start[i] && start[i] != '?' && start[i] != ' ' && i < sizeof(encoded) - 1) {
+        encoded[i] = start[i];
         i++;
     }
-    name[i] = '\0';
-    return (i > 0) ? 0 : -1;
+    encoded[i] = '\0';
+    
+    if (i == 0) return -1;
+    
+    /* URL解码支持中文名称 */
+    mg_url_decode(encoded, strlen(encoded), name, size, 0);
+    return (strlen(name) > 0) ? 0 : -1;
 }
 
 /* GET /api/plugins/storage/:name - 读取插件存储 */
@@ -1688,4 +1702,144 @@ void handle_plugin_storage_delete(struct mg_connection *c, struct mg_http_messag
     } else {
         HTTP_OK(c, "{\"Code\":1,\"Error\":\"删除失败\",\"Data\":null}");
     }
+}
+
+
+/* ==================== 认证 API ==================== */
+#include "auth.h"
+
+/* POST /api/auth/login - 用户登录 */
+void handle_auth_login(struct mg_connection *c, struct mg_http_message *hm) {
+    HTTP_CHECK_POST(c, hm);
+
+    char password[128] = {0};
+    char token[AUTH_TOKEN_SIZE] = {0};
+    char response[256];
+    
+    /* 解析密码 */
+    char *pwd_str = mg_json_get_str(hm->body, "$.password");
+    if (pwd_str) {
+        strncpy(password, pwd_str, sizeof(password) - 1);
+        free(pwd_str);
+    }
+    
+    if (strlen(password) == 0) {
+        HTTP_ERROR(c, 400, "密码不能为空");
+        return;
+    }
+    
+    /* 尝试登录 */
+    int ret = auth_login(password, token, sizeof(token));
+    
+    if (ret == 0) {
+        snprintf(response, sizeof(response),
+            "{\"status\":\"success\",\"message\":\"登录成功\",\"token\":\"%s\"}", token);
+        HTTP_OK(c, response);
+    } else if (ret == -1) {
+        HTTP_JSON(c, 401, "{\"status\":\"error\",\"message\":\"密码错误\"}");
+    } else {
+        HTTP_ERROR(c, 500, "登录失败");
+    }
+}
+
+/* POST /api/auth/logout - 用户登出 */
+void handle_auth_logout(struct mg_connection *c, struct mg_http_message *hm) {
+    HTTP_CHECK_POST(c, hm);
+
+    /* 从Authorization头获取token */
+    struct mg_str *auth_header = mg_http_get_header(hm, "Authorization");
+    char token[AUTH_TOKEN_SIZE] = {0};
+    
+    if (auth_header && auth_header->len > 7) {
+        /* 格式: "Bearer <token>" */
+        if (strncmp(auth_header->buf, "Bearer ", 7) == 0) {
+            size_t token_len = auth_header->len - 7;
+            if (token_len < sizeof(token)) {
+                memcpy(token, auth_header->buf + 7, token_len);
+                token[token_len] = '\0';
+            }
+        }
+    }
+    
+    if (strlen(token) == 0) {
+        HTTP_ERROR(c, 400, "未提供Token");
+        return;
+    }
+    
+    if (auth_logout(token) == 0) {
+        HTTP_SUCCESS(c, "登出成功");
+    } else {
+        HTTP_ERROR(c, 400, "登出失败");
+    }
+}
+
+/* POST /api/auth/password - 修改密码 */
+void handle_auth_password(struct mg_connection *c, struct mg_http_message *hm) {
+    HTTP_CHECK_POST(c, hm);
+
+    char old_password[128] = {0};
+    char new_password[128] = {0};
+    
+    /* 解析参数 */
+    char *old_str = mg_json_get_str(hm->body, "$.old_password");
+    char *new_str = mg_json_get_str(hm->body, "$.new_password");
+    
+    if (old_str) {
+        strncpy(old_password, old_str, sizeof(old_password) - 1);
+        free(old_str);
+    }
+    if (new_str) {
+        strncpy(new_password, new_str, sizeof(new_password) - 1);
+        free(new_str);
+    }
+    
+    if (strlen(old_password) == 0 || strlen(new_password) == 0) {
+        HTTP_ERROR(c, 400, "旧密码和新密码不能为空");
+        return;
+    }
+    
+    /* 修改密码 */
+    int ret = auth_change_password(old_password, new_password);
+    
+    if (ret == 0) {
+        HTTP_SUCCESS(c, "密码修改成功，请重新登录");
+    } else if (ret == -1) {
+        HTTP_JSON(c, 401, "{\"status\":\"error\",\"message\":\"旧密码错误\"}");
+    } else {
+        HTTP_ERROR(c, 500, "密码修改失败");
+    }
+}
+
+/* GET /api/auth/status - 获取登录状态 */
+void handle_auth_status(struct mg_connection *c, struct mg_http_message *hm) {
+    HTTP_CHECK_GET(c, hm);
+
+    int logged_in = 0;
+    int required = auth_is_required();
+    char response[128];
+    
+    /* 从Authorization头获取token并验证 */
+    struct mg_str *auth_header = mg_http_get_header(hm, "Authorization");
+    
+    if (auth_header && auth_header->len > 7) {
+        if (strncmp(auth_header->buf, "Bearer ", 7) == 0) {
+            char token[AUTH_TOKEN_SIZE] = {0};
+            size_t token_len = auth_header->len - 7;
+            if (token_len < sizeof(token)) {
+                memcpy(token, auth_header->buf + 7, token_len);
+                token[token_len] = '\0';
+                
+                if (auth_verify_token(token) == 0) {
+                    logged_in = 1;
+                }
+            }
+        }
+    }
+    
+    snprintf(response, sizeof(response),
+        "{\"logged_in\":%s,\"auth_required\":%s}",
+        logged_in ? "true" : "false",
+        required ? "true" : "false");
+    
+    HTTP_OK(c, response);
 }

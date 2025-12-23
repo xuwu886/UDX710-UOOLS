@@ -930,38 +930,38 @@ onMounted(() => {
           </div>
         </div>
         <!-- 操作按钮组 - 美化布局 -->
-        <div class="flex items-center gap-2">
+        <div class="flex items-center gap-1.5 sm:gap-2 overflow-x-auto">
           <!-- 主要操作 -->
-          <div class="flex items-center bg-slate-100 dark:bg-white/5 rounded-xl p-1">
+          <div class="flex items-center bg-slate-100 dark:bg-white/5 rounded-lg sm:rounded-xl p-0.5 sm:p-1 flex-shrink-0">
             <button @click="showUploadModal = true"
-              class="px-3 py-1.5 bg-violet-500 hover:bg-violet-600 text-white rounded-lg text-xs font-medium transition-all flex items-center space-x-1.5">
+              class="px-2 sm:px-3 py-1 sm:py-1.5 bg-violet-500 hover:bg-violet-600 text-white rounded-md sm:rounded-lg text-xs font-medium transition-all flex items-center space-x-1">
               <font-awesome-icon icon="plus" class="text-xs" />
               <span>{{ $t('plugins.plugin') }}</span>
             </button>
             <button @click="openScriptManager"
-              class="px-3 py-1.5 hover:bg-white/50 dark:hover:bg-white/10 text-slate-600 dark:text-white/70 rounded-lg text-xs font-medium transition-all flex items-center space-x-1.5 ml-1">
+              class="px-2 sm:px-3 py-1 sm:py-1.5 hover:bg-white/50 dark:hover:bg-white/10 text-slate-600 dark:text-white/70 rounded-md sm:rounded-lg text-xs font-medium transition-all flex items-center space-x-1">
               <font-awesome-icon icon="terminal" class="text-xs" />
               <span>{{ $t('plugins.script') }}</span>
             </button>
           </div>
           <!-- 导入导出 -->
-          <div class="flex items-center bg-slate-100 dark:bg-white/5 rounded-xl p-1">
+          <div class="flex items-center bg-slate-100 dark:bg-white/5 rounded-lg sm:rounded-xl p-0.5 sm:p-1 flex-shrink-0">
             <button @click="handleExportAll" v-if="plugins.length > 0"
-              class="px-2.5 py-1.5 hover:bg-blue-500/20 text-blue-500 rounded-lg text-xs font-medium transition-all flex items-center space-x-1" :title="$t('plugins.exportAll')">
+              class="px-1.5 sm:px-2.5 py-1 sm:py-1.5 hover:bg-blue-500/20 text-blue-500 rounded-md sm:rounded-lg text-xs font-medium transition-all flex items-center" :title="$t('plugins.exportAll')">
               <font-awesome-icon icon="file-export" class="text-xs" />
             </button>
-            <label class="px-2.5 py-1.5 hover:bg-cyan-500/20 text-cyan-500 rounded-lg text-xs font-medium transition-all flex items-center space-x-1 cursor-pointer" :title="$t('plugins.importAll')">
+            <label class="px-1.5 sm:px-2.5 py-1 sm:py-1.5 hover:bg-cyan-500/20 text-cyan-500 rounded-md sm:rounded-lg text-xs font-medium transition-all flex items-center cursor-pointer" :title="$t('plugins.importAll')">
               <font-awesome-icon icon="file-import" class="text-xs" />
               <input type="file" accept=".json" @change="handleImportAll" class="hidden">
             </label>
             <button @click="handleDeleteAll" v-if="plugins.length > 0"
-              class="px-2.5 py-1.5 hover:bg-red-500/20 text-red-500 rounded-lg text-xs font-medium transition-all" :title="$t('plugins.clearPlugins')">
+              class="px-1.5 sm:px-2.5 py-1 sm:py-1.5 hover:bg-red-500/20 text-red-500 rounded-md sm:rounded-lg text-xs font-medium transition-all" :title="$t('plugins.clearPlugins')">
               <font-awesome-icon icon="trash-alt" class="text-xs" />
             </button>
           </div>
           <!-- 刷新 -->
           <button @click="fetchPlugins" :disabled="loading"
-            class="w-8 h-8 bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 text-slate-500 dark:text-white/50 rounded-xl text-xs transition-all flex items-center justify-center">
+            class="w-7 h-7 sm:w-8 sm:h-8 bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 text-slate-500 dark:text-white/50 rounded-lg sm:rounded-xl text-xs transition-all flex items-center justify-center flex-shrink-0">
             <font-awesome-icon :icon="loading ? 'spinner' : 'sync-alt'" :class="loading ? 'animate-spin' : ''" />
           </button>
         </div>

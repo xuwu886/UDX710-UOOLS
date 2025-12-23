@@ -747,6 +747,39 @@ export default {
     switchTo: '切换语言'
   },
 
+  // 认证
+  auth: {
+    login: '登录',
+    logout: '退出登录',
+    password: '密码',
+    enterPassword: '请输入密码',
+    loginSuccess: '登录成功',
+    loginFailed: '登录失败',
+    wrongPassword: '密码错误',
+    accountSecurity: '账户安全',
+    changePassword: '修改密码',
+    oldPassword: '当前密码',
+    newPassword: '新密码',
+    confirmNewPassword: '确认新密码',
+    enterOldPassword: '请输入当前密码',
+    enterNewPassword: '请输入新密码',
+    enterConfirmPassword: '请再次输入新密码',
+    passwordChanged: '密码修改成功',
+    changeFailed: '密码修改失败',
+    passwordMismatch: '两次输入的密码不一致',
+    passwordTooShort: '密码长度至少4位',
+    fillAllFields: '请填写所有字段',
+    changePasswordDesc: '修改登录密码以保护账户安全',
+    rememberPassword: '记住密码',
+    loggedIn: '已登录',
+    sessionActive: '会话有效',
+    logoutDesc: '退出登录后需要重新输入密码才能访问管理界面',
+    confirmLogout: '确定要退出登录吗？',
+    welcomeBack: '欢迎回来',
+    loginToContinue: '请输入密码以继续',
+    loggingIn: '登录中...'
+  },
+
   // 小区管理模块
   cell: {
     title: '小区管理',

@@ -53,7 +53,7 @@ export default {
 
   // Menu
   menu: {
-    monitor: 'System Monitor',
+    monitor: 'System',
     network: 'Network',
     apn: 'APN Config',
     advanced: 'Advanced',
@@ -745,6 +745,39 @@ export default {
     zh: '中文',
     en: 'English',
     switchTo: 'Switch Language'
+  },
+
+  // Auth
+  auth: {
+    login: 'Login',
+    logout: 'Logout',
+    password: 'Password',
+    enterPassword: 'Enter password',
+    loginSuccess: 'Login successful',
+    loginFailed: 'Login failed',
+    wrongPassword: 'Wrong password',
+    accountSecurity: 'Account Security',
+    changePassword: 'Change Password',
+    oldPassword: 'Current Password',
+    newPassword: 'New Password',
+    confirmNewPassword: 'Confirm New Password',
+    enterOldPassword: 'Enter current password',
+    enterNewPassword: 'Enter new password',
+    enterConfirmPassword: 'Enter new password again',
+    passwordChanged: 'Password changed successfully',
+    changeFailed: 'Failed to change password',
+    passwordMismatch: 'Passwords do not match',
+    passwordTooShort: 'Password must be at least 4 characters',
+    fillAllFields: 'Please fill in all fields',
+    changePasswordDesc: 'Change login password to protect your account',
+    rememberPassword: 'Remember password',
+    loggedIn: 'Logged In',
+    sessionActive: 'Session Active',
+    logoutDesc: 'After logout, you need to enter password again to access the management interface',
+    confirmLogout: 'Are you sure you want to logout?',
+    welcomeBack: 'Welcome Back',
+    loginToContinue: 'Enter password to continue',
+    loggingIn: 'Logging in...'
   },
 
   // Cell Manager

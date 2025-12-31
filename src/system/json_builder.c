@@ -150,11 +150,38 @@ void json_add_str(JsonBuilder *j, const char *key, const char *val) {
     if (!j || !key) return;
     json_comma(j);
     
-    /* 使用mg_snprintf和MG_ESC进行转义 */
-    char tmp[4096];
-    size_t n = mg_snprintf(tmp, sizeof(tmp), "\"%s\":%m", key, MG_ESC(val ? val : ""));
-    if (n > 0 && n < sizeof(tmp)) {
-        mg_iobuf_add(&j->buf, j->buf.len, tmp, n);
+    /* 计算需要的缓冲区大小：key + 引号 + 冒号 + 转义后的val */
+    size_t key_len = strlen(key);
+    size_t val_len = val ? strlen(val) : 0;
+    /* MG_ESC最坏情况：每个字符转义为\uXXXX(6字节) + 引号(2字节) */
+    size_t need_size = key_len + 4 + val_len * 6 + 16;
+    
+    if (need_size <= 4096) {
+        /* 小字符串使用栈缓冲区 */
+        char tmp[4096];
+        size_t n = mg_snprintf(tmp, sizeof(tmp), "\"%s\":%m", key, MG_ESC(val ? val : ""));
+        if (n > 0 && n < sizeof(tmp)) {
+            mg_iobuf_add(&j->buf, j->buf.len, tmp, n);
+        } else {
+            /* 栈缓冲区不足，回退到空值 */
+            json_appendf(j, "\"%s\":\"\"", key);
+        }
+    } else {
+        /* 大字符串使用动态分配 */
+        char *buf = (char *)malloc(need_size);
+        if (buf) {
+            size_t n = mg_snprintf(buf, need_size, "\"%s\":%m", key, MG_ESC(val ? val : ""));
+            if (n > 0 && n < need_size) {
+                mg_iobuf_add(&j->buf, j->buf.len, buf, n);
+            } else {
+                /* 缓冲区不足，添加空值 */
+                json_appendf(j, "\"%s\":\"\"", key);
+            }
+            free(buf);
+        } else {
+            /* 分配失败，添加空值 */
+            json_appendf(j, "\"%s\":\"\"", key);
+        }
     }
 }
 
@@ -197,10 +224,24 @@ void json_add_null(JsonBuilder *j, const char *key) {
 void json_add_raw(JsonBuilder *j, const char *key, const char *val) {
     if (!j || !val) return;
     json_comma(j);
+    
+    size_t val_len = strlen(val);
+    
     if (key && strlen(key) > 0) {
-        json_appendf(j, "\"%s\":%s", key, val);
+        size_t key_len = strlen(key);
+        size_t need_size = key_len + val_len + 8;  /* "key": + val + null */
+        
+        if (need_size <= 4096) {
+            json_appendf(j, "\"%s\":%s", key, val);
+        } else {
+            /* 大字符串：分开添加 */
+            char key_part[256];
+            snprintf(key_part, sizeof(key_part), "\"%s\":", key);
+            mg_iobuf_add(&j->buf, j->buf.len, key_part, strlen(key_part));
+            mg_iobuf_add(&j->buf, j->buf.len, val, val_len);
+        }
     } else {
-        json_append(j, val, strlen(val));
+        json_append(j, val, val_len);
     }
 }
 
@@ -210,10 +251,30 @@ void json_arr_add_str(JsonBuilder *j, const char *val) {
     if (!j) return;
     json_comma(j);
     
-    char tmp[4096];
-    size_t n = mg_snprintf(tmp, sizeof(tmp), "%m", MG_ESC(val ? val : ""));
-    if (n > 0 && n < sizeof(tmp)) {
-        mg_iobuf_add(&j->buf, j->buf.len, tmp, n);
+    size_t val_len = val ? strlen(val) : 0;
+    size_t need_size = val_len * 6 + 16;
+    
+    if (need_size <= 4096) {
+        char tmp[4096];
+        size_t n = mg_snprintf(tmp, sizeof(tmp), "%m", MG_ESC(val ? val : ""));
+        if (n > 0 && n < sizeof(tmp)) {
+            mg_iobuf_add(&j->buf, j->buf.len, tmp, n);
+        } else {
+            mg_iobuf_add(&j->buf, j->buf.len, "\"\"", 2);
+        }
+    } else {
+        char *buf = (char *)malloc(need_size);
+        if (buf) {
+            size_t n = mg_snprintf(buf, need_size, "%m", MG_ESC(val ? val : ""));
+            if (n > 0 && n < need_size) {
+                mg_iobuf_add(&j->buf, j->buf.len, buf, n);
+            } else {
+                mg_iobuf_add(&j->buf, j->buf.len, "\"\"", 2);
+            }
+            free(buf);
+        } else {
+            mg_iobuf_add(&j->buf, j->buf.len, "\"\"", 2);
+        }
     }
 }
 
